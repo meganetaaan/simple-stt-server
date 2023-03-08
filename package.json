@@ -1,0 +1,24 @@
+{
+  "name": "suburi-vosk",
+  "version": "0.0.1",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com/meganetaaan/suburi-vosk.git"
+  },
+  "author": "Shinya Ishikawa",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/meganetaaan/suburi-vosk/issues"
+  },
+  "homepage": "https://github.com/meganetaaan/suburi-vosk#readme",
+  "dependencies": {
+    "express": "^4.18.2",
+    "express-ws": "^5.0.2",
+    "vosk": "^0.3.39"
+  }
+}
