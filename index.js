@@ -12,9 +12,9 @@ const PORT = 8080
 let sockets = []
 
 function sendMessage(message) {
-    for (const socket of sockets) {
-        socket.send(message)
-    }
+  for (const socket of sockets) {
+    socket.send(message)
+  }
 }
 
 // WebSocketエンドポイントの設定
@@ -38,18 +38,23 @@ MODEL_PATH = "model"
 SAMPLE_RATE = 16000
 
 if (!fs.existsSync(MODEL_PATH)) {
-    console.log("Please download the model from https://alphacephei.com/vosk/models and unpack as " + MODEL_PATH + " in the current folder.")
-    process.exit()
+  console.log("Please download the model from https://alphacephei.com/vosk/models and unpack as " + MODEL_PATH + " in the current folder.")
+  process.exit()
 }
 
 vosk.setLogLevel(0);
 const model = new vosk.Model(MODEL_PATH);
-const rec = new vosk.Recognizer({model: model, sampleRate: SAMPLE_RATE});
+const rec = new vosk.Recognizer({ model: model, sampleRate: SAMPLE_RATE });
 
 var micInstance = mic({
-    rate: String(SAMPLE_RATE),
-    channels: '1',
-    debug: false
+  /** 
+   * @note If you get "No such file or directory" error
+   * You should specify the device
+   **/
+  // device: "plughw:CARD=PCH,DEV=0",
+  rate: String(SAMPLE_RATE),
+  channels: '1',
+  debug: false
 });
 
 var micInputStream = micInstance.getAudioStream();
@@ -61,7 +66,7 @@ micInputStream.on("data", (data) => {
     console.log(result);
     const message = result.text
     if (message != null && message.length > 1) {
-        sendMessage(message);
+      sendMessage(message);
     }
   } else {
     // console.log(rec.partialResult());
