@@ -1,81 +1,168 @@
-var vosk = require('./node_modules/vosk')
-const fs = require("fs");
-var mic = require("mic");
+const vosk = require('./node_modules/vosk');
+const fs = require('fs');
+const mic = require('mic');
+const Express = require('express');
+const useWebSocket = require('express-ws');
+const keypress = require('keypress');
 
-const Express = require('express')
-const useWebSocket = require('express-ws')
+const SERVER_PORT = 8080;
+const VOSK_MODEL_PATH = 'model';
+const VOSK_SAMPLE_RATE = 16000;
+const VOSK_NUM_CHANNELS = 1;
 
-const app = Express()
-useWebSocket(app)
+class Server {
+  server;
+  sockets = [];
 
-const PORT = 8080
-let sockets = []
+  constructor({ port }) {
+    const app = Express();
+    useWebSocket(app);
 
-function sendMessage(message) {
-  for (const socket of sockets) {
-    socket.send(message)
+    app.ws('/', (socket) => {
+      this.sockets.push(socket);
+      console.log(`connected. current # of connection: ${this.sockets.length}`);
+      socket.on('close', () => {
+        this.sockets = this.sockets.filter((s) => {
+          return s !== socket;
+        });
+        console.log(`closed. current # of connection: ${this.sockets.length}`);
+      });
+    });
+
+    this.server = app.listen(port, () => {
+      console.log(`listening on port ${port}`);
+    });
   }
-}
 
-// WebSocketエンドポイントの設定
-app.ws('/', function (socket) {
-  sockets.push(socket)
-  console.log(`connected. current # of connection: ${sockets.length}`)
-  socket.on('close', () => {
-    // 閉じたコネクションを取り除く
-    sockets = sockets.filter(s => {
-      return s !== socket
-    })
-    console.log(`closed. current # of connection: ${sockets.length}`)
-  })
-})
-// ポート8080で接続を待ち受ける
-app.listen(PORT, function () {
-  console.log(`listening on port ${PORT}`)
-})
+  close() {
+    this.server.close();
+  }
 
-MODEL_PATH = "model"
-SAMPLE_RATE = 16000
-
-if (!fs.existsSync(MODEL_PATH)) {
-  console.log("Please download the model from https://alphacephei.com/vosk/models and unpack as " + MODEL_PATH + " in the current folder.")
-  process.exit()
-}
-
-vosk.setLogLevel(0);
-const model = new vosk.Model(MODEL_PATH);
-const rec = new vosk.Recognizer({ model: model, sampleRate: SAMPLE_RATE });
-
-var micInstance = mic({
-  /** 
-   * @note If you get "No such file or directory" error
-   * You should specify the device
-   **/
-  // device: "plughw:CARD=PCH,DEV=0",
-  rate: String(SAMPLE_RATE),
-  channels: '1',
-  debug: false
-});
-
-var micInputStream = micInstance.getAudioStream();
-micInstance.start();
-
-micInputStream.on("data", (data) => {
-  if (rec.acceptWaveform(data)) {
-    const result = rec.result()
-    console.log(result);
-    const message = result.text
-    if (message != null && message.length > 1) {
-      sendMessage(message);
+  sendMessage(message) {
+    for (const socket of this.sockets) {
+      socket.send(message);
     }
-  } else {
-    // console.log(rec.partialResult());
   }
-});
+}
 
-process.on("SIGINT", function () {
-  console.log(rec.finalResult());
-  console.log("\nDone");
-  rec.free();
-  model.free();
-});
+class VoskRecognizer {
+  model;
+  rec;
+  micInstance;
+  micInputStream;
+  constructor({ vosk, onRecognized }) {
+    this.onRecognized = onRecognized;
+    this.model = new vosk.Model(VOSK_MODEL_PATH);
+    this.rec = new vosk.Recognizer({
+      model: this.model,
+      sampleRate: VOSK_SAMPLE_RATE,
+    });
+    this.micInstance = mic({
+      /**
+       * @note If you get "No such file or directory" error
+       * You should specify the device
+       **/
+      device: 'plughw:CARD=PCH,DEV=0',
+      rate: String(VOSK_SAMPLE_RATE),
+      channels: String(VOSK_NUM_CHANNELS),
+      debug: false,
+    });
+
+    const micInputStream = this.micInstance.getAudioStream();
+    micInputStream.on('data', (data) => {
+      if (this.rec.acceptWaveform(data)) {
+        const result = this.rec.result();
+        console.log(result);
+        const message = result.text;
+        if (message != null && message.length > 1) {
+          this.onRecognized?.(message);
+        }
+      } else {
+        // console.log(rec.partialResult());
+      }
+    });
+    this.start();
+  }
+  start() {
+    this.micInstance.start();
+  }
+  pause() {
+    this.micInstance.pause();
+  }
+  close() {
+    console.log(this.rec.finalResult());
+    this.micInstance.stop();
+    this.rec.free();
+    this.model.free();
+  }
+}
+
+class KeyHandler {
+  constructor({ onKeyPressed, stdin }) {
+    keypress(stdin);
+    this.onKeyPressed = onKeyPressed;
+    stdin.on('keypress', (_ch, key) => {
+      if (key && key.ctrl && key.name == 'c') {
+        process.kill(process.pid, 'SIGINT');
+        //強制終了するなら　process.stdin.exit();
+      } else if (key != null) {
+        // Spaceキーが押された時に実行する関数を呼び出す
+        this.onKeyPressed?.(key);
+      }
+    });
+    stdin.setRawMode(true);
+    stdin.resume();
+    this.stdin = stdin;
+  }
+
+  close() {
+    this.stdin.destroy();
+  }
+}
+
+(function main() {
+  let listening = true;
+  if (!fs.existsSync(VOSK_MODEL_PATH)) {
+    console.log(
+      `Please download the model from https://alphacephei.com/vosk/models and unpack as ${VOSK_MODEL_PATH} in the current folder.`
+    );
+    process.exit();
+  }
+
+  const server = new Server({
+    port: SERVER_PORT,
+  });
+
+  vosk.setLogLevel(0);
+  const recognizer = new VoskRecognizer({
+    vosk,
+    onRecognized: (message) => {
+      if (listening) {
+        server.sendMessage(message);
+      }
+    },
+  });
+
+  const keyHandler = new KeyHandler({
+    stdin: process.stdin,
+    onKeyPressed: (key) => {
+      if (key.name === 'space') {
+        listening = !listening;
+        if (listening) {
+          console.log('resuming');
+          // recognizer.start();
+        } else {
+          console.log('pausing');
+          // recognizer.pause();
+        }
+      }
+      // console.log(key);
+    },
+  });
+  process.on('SIGINT', function () {
+    server.close();
+    recognizer.close();
+    keyHandler.close();
+    console.log('\nDone');
+  });
+})();
