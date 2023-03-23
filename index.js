@@ -62,10 +62,10 @@ class VoskRecognizer {
        * @note If you get "No such file or directory" error
        * You should specify the device
        **/
-      device: 'plughw:CARD=PCH,DEV=0',
+      // device: 'plughw:CARD=PCH,DEV=0',
       rate: String(VOSK_SAMPLE_RATE),
       channels: String(VOSK_NUM_CHANNELS),
-      debug: false,
+      debug: true,
     });
 
     const micInputStream = this.micInstance.getAudioStream();
