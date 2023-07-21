@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+  <meta charset="UTF-8">
+  <title>Stack-chan chatGPT demo</title>
+</head>
+
+<body>
+  <h1>WebSocket Test</h1>
+  <form id="message-form">
+    <label for="message">Message:</label>
+    <input type="text" id="message" name="message">
+    <input type="submit" value="Send">
+  </form>
+  <script>
+    const handleMessageSubmit = async (event) => {
+      event.preventDefault();
+      const message = document.getElementById('message').value;
+
+      try {
+        const response = await fetch('/message', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            message: message
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error('Network response was not ok');
+        }
+
+        const responseData = await response.json();
+        console.log(responseData);
+      } catch (error) {
+        console.error('There has been a problem with your fetch operation: ', error);
+      }
+    }
+
+    // binding
+    document.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('message-form').addEventListener('submit', handleMessageSubmit);
+    })
+  </script>
+  </body>
+  
+  </html>

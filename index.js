@@ -19,6 +19,21 @@ class Server {
     const app = Express();
     useWebSocket(app);
 
+    app.use(Express.json());
+    app.use('/', Express.static('public'));
+    app.post('/message', (req, res) => {
+      const { message } = req.body;
+
+      if (message == null) {
+        res.status(400).json({
+          error: 'Bad Request: `message` property required'
+        })
+      } else {
+        this.sendMessage(message);
+        res.sendStatus(200);
+      }
+    })
+
     app.ws('/', (socket) => {
       this.sockets.push(socket);
       console.log(`connected. current # of connection: ${this.sockets.length}`);
@@ -43,6 +58,7 @@ class Server {
     for (const socket of this.sockets) {
       socket.send(message);
     }
+    console.log(`message sent: ${message}`)
   }
 }
 
