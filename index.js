@@ -51,23 +51,23 @@ class VoskRecognizer {
   rec;
   micInstance;
   micInputStream;
-  constructor({ vosk, onRecognized }) {
+  constructor({ device, vosk, onRecognized }) {
     this.onRecognized = onRecognized;
     this.model = new vosk.Model(VOSK_MODEL_PATH);
     this.rec = new vosk.Recognizer({
       model: this.model,
       sampleRate: VOSK_SAMPLE_RATE,
     });
-    this.micInstance = mic({
-      /**
-       * @note If you get "No such file or directory" error
-       * You should specify the device
-       **/
-      // device: 'plughw:CARD=PCH,DEV=0',
+
+    const option = {
       rate: String(VOSK_SAMPLE_RATE),
       channels: String(VOSK_NUM_CHANNELS),
       debug: true,
-    });
+    }
+    if (device) {
+      option.device = device
+    }
+    this.micInstance = mic(option);
 
     const micInputStream = this.micInstance.getAudioStream();
     micInputStream.on('data', (data) => {
