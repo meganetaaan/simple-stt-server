@@ -1,4 +1,5 @@
 const vosk = require('./node_modules/vosk');
+const minimist = require('minimist')
 const fs = require('fs');
 const mic = require('mic');
 const Express = require('express');
@@ -121,8 +122,12 @@ class KeyHandler {
 }
 
 (function main() {
+  const argv = minimist(process.argv.slice(2));
+  const device = argv.device;
+  const useVosk = argv.useVosk !== 'false';
+
   let listening = true;
-  if (!fs.existsSync(VOSK_MODEL_PATH)) {
+  if (useVosk && !fs.existsSync(VOSK_MODEL_PATH)) {
     console.log(
       `Please download the model from https://alphacephei.com/vosk/models and unpack as ${VOSK_MODEL_PATH} in the current folder.`
     );
@@ -133,36 +138,42 @@ class KeyHandler {
     port: SERVER_PORT,
   });
 
-  vosk.setLogLevel(0);
-  const recognizer = new VoskRecognizer({
-    vosk,
-    onRecognized: (message) => {
-      if (listening) {
-        server.sendMessage(message);
-      }
-    },
-  });
+  let recognizer;
+  let keyHandler;
 
-  const keyHandler = new KeyHandler({
-    stdin: process.stdin,
-    onKeyPressed: (key) => {
-      if (key.name === 'space') {
-        listening = !listening;
+  if (useVosk) {
+    vosk.setLogLevel(0);
+    recognizer = new VoskRecognizer({
+      device,
+      vosk,
+      onRecognized: (message) => {
         if (listening) {
-          console.log('resuming');
-          // recognizer.start();
-        } else {
-          console.log('pausing');
-          // recognizer.pause();
+          server.sendMessage(message);
         }
-      }
-      // console.log(key);
-    },
-  });
+      },
+    });
+    keyHandler = new KeyHandler({
+      stdin: process.stdin,
+      onKeyPressed: (key) => {
+        if (key.name === 'space') {
+          listening = !listening;
+          if (listening) {
+            console.log('resuming');
+            // recognizer.start();
+          } else {
+            console.log('pausing');
+            // recognizer.pause();
+          }
+        }
+        // console.log(key);
+      },
+    });
+  }
+
   process.on('SIGINT', function () {
     server.close();
-    recognizer.close();
-    keyHandler.close();
+    recognizer?.close();
+    keyHandler?.close();
     console.log('\nDone');
   });
 })();
