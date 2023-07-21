@@ -175,5 +175,6 @@ class KeyHandler {
     recognizer?.close();
     keyHandler?.close();
     console.log('\nDone');
+    process.exit();
   });
 })();
