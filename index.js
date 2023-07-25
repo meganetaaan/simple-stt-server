@@ -22,17 +22,17 @@ class Server {
     app.use(Express.json());
     app.use('/', Express.static('public'));
     app.post('/message', (req, res) => {
-      const { message } = req.body;
+      const { role = 'user', message } = req.body;
 
       if (message == null) {
         res.status(400).json({
-          error: 'Bad Request: `message` property required'
-        })
+          error: 'Bad Request: `message` property required',
+        });
       } else {
-        this.sendMessage(message);
+        this.sendMessage(role, message);
         res.sendStatus(200);
       }
-    })
+    });
 
     app.ws('/', (socket) => {
       this.sockets.push(socket);
@@ -54,11 +54,12 @@ class Server {
     this.server.close();
   }
 
-  sendMessage(message) {
+  sendMessage(role, message) {
+    const str = JSON.stringify({ role, message });
     for (const socket of this.sockets) {
-      socket.send(message);
+      socket.send(str);
     }
-    console.log(`message sent: ${message}`)
+    console.log(`message sent: ${str}`);
   }
 }
 
@@ -79,9 +80,9 @@ class VoskRecognizer {
       rate: String(VOSK_SAMPLE_RATE),
       channels: String(VOSK_NUM_CHANNELS),
       debug: true,
-    }
+    };
     if (device) {
-      option.device = device
+      option.device = device;
     }
     this.micInstance = mic(option);
 

@@ -4,16 +4,157 @@
 <head>
   <meta charset="UTF-8">
   <title>Stack-chan chatGPT demo</title>
+  <style>
+    :root {
+      --border-radius: 5px;
+    }
+
+    body {
+      margin: 0px;
+      padding: 0px;
+      width: 100%;
+      height: 100%;
+      background-color: #eee;
+    }
+
+    .app {
+      width: 100%;
+      max-width: 800px;
+      margin: auto;
+    }
+
+    #chat {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      overflow-y: auto;
+      height: 600px;
+      padding: 10px;
+      margin-bottom: 10px;
+      background-color: #7494C0;
+      border-radius: var(--border-radius);
+    }
+
+    .message {
+      max-width: 80%;
+      margin-bottom: 10px;
+      padding: 5px 20px;
+      border-radius: 10px;
+    }
+
+    .user {
+      align-self: flex-end;
+      background-color: #8DE055;
+    }
+
+    .assistant {
+      align-self: flex-start;
+      background-color: #EDF1EE;
+    }
+
+    .message-form {
+      width: 100%;
+      display: flex;
+      gap: 5px;
+    }
+
+    .message-container {
+      position: relative;
+      flex-grow: 1;
+    }
+
+    .message-input {
+      border-radius: var(--border-radius);
+      border: 1px solid #ddd;
+      padding: 5px;
+      width: calc(100% - 10px);
+    }
+
+    button,
+    input[type="submit"] {
+      border-radius: var(--border-radius);
+      border: 1px solid #ddd;
+      background-color: #ddd;
+      padding: 5px 10px;
+      margin-left: 5px;
+    }
+
+    .overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0, 0, 0, 0.1);
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+
+    .show-overlay {
+      opacity: 1;
+    }
+
+    .recording {
+      background: rgba(0, 0, 0, 0.1);
+      pointer-events: none;
+    }
+  </style>
 </head>
 
 <body>
-  <h1>WebSocket Test</h1>
-  <form id="message-form">
-    <label for="message">Message:</label>
-    <input type="text" id="message" name="message">
-    <input type="submit" value="Send">
-  </form>
+  <div class="app">
+    <h1>ChatGPT DEMO</h1>
+    <div id="chat"></div>
+    <form id="message-form" class="message-form">
+      <label for="message">Message:</label>
+      <div id="message-container" class="message-container">
+        <input type="text" id="message" name="message" class="message-input">
+        <div id="overlay" class="overlay">Recording...</div>
+      </div>
+      <input type="submit" value="Send">
+    </form>
+    <button id="mic-button">🎤</button>
+  </div>
   <script>
+    // Create a WebSocket connection to the server
+    const ws = new WebSocket(
+      ((window.location.protocol === "https:") ? "wss://" : "ws://") +
+      window.location.host
+    );
+
+    // Connection opened
+    ws.addEventListener('open', (event) => {
+      console.log('Connected to the WebSocket server');
+    });
+
+    // Listen for messages from the server
+    ws.addEventListener('message', (event) => {
+      console.log('Message from server: ', event.data);
+      const { role, message } = JSON.parse(event.data);
+      insertMessage(role, message);
+    });
+
+    // Insert message to chat
+    const insertMessage = (role, message) => {
+      const chat = document.getElementById('chat');
+      const messageElement = document.createElement('div');
+      messageElement.textContent = message;
+      messageElement.classList.add('message', role);
+      chat.appendChild(messageElement);
+
+      // Auto scroll to bottom
+      chat.scrollTop = chat.scrollHeight;
+    }
+
+    // Binding
+    document.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('message-form').addEventListener('submit', handleMessageSubmit);
+    })
+
     const handleMessageSubmit = async (event) => {
       event.preventDefault();
       const message = document.getElementById('message').value;
@@ -25,6 +166,7 @@
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
+            role: 'user',
             message: message
           })
         });
@@ -33,18 +175,60 @@
           throw new Error('Network response was not ok');
         }
 
-        const responseData = await response.json();
-        console.log(responseData);
+        document.getElementById('message').value = '';
       } catch (error) {
         console.error('There has been a problem with your fetch operation: ', error);
       }
     }
+
+    // Create a new SpeechRecognition object
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const recognition = new SpeechRecognition();
+
+    // Stop recognition after a period of silence
+    recognition.continuous = false;
+
+    // JP lang
+    recognition.lang = 'ja-JP';
+
+    // Update the message input with the transcribed speech
+    recognition.onresult = (event) => {
+      const current = event.resultIndex;
+      const transcript = event.results[current][0].transcript;
+      const messageInput = document.getElementById('message');
+      messageInput.value += transcript;
+    };
+
+    recognition.onstart = () => {
+      const messageInput = document.getElementById('message');
+      const overlay = document.getElementById('overlay');
+      messageInput.classList.add('recording');
+      overlay.classList.add('show-overlay')
+    };
+
+    recognition.onend = () => {
+      const messageInput = document.getElementById('message');
+      const overlay = document.getElementById('overlay');
+      messageInput.classList.remove('recording');
+      overlay.classList.remove('show-overlay')
+    };
+    recognition.onerror = (event) => {
+      console.error('Speech recognition error', event.error);
+    };
+
+    recognition.onspeechend = () => {
+      console.log('Speech recognition has stopped.');
+    };
+    // Handle mic button click
+    document.getElementById('mic-button').addEventListener('click', () => {
+      recognition.start();
+    });
 
     // binding
     document.addEventListener('DOMContentLoaded', () => {
       document.getElementById('message-form').addEventListener('submit', handleMessageSubmit);
     })
   </script>
-  </body>
-  
-  </html>
+</body>
+
+</html>
