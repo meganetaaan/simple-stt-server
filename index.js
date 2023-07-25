@@ -1,4 +1,5 @@
 const vosk = require('./node_modules/vosk');
+const minimist = require('minimist');
 const fs = require('fs');
 const mic = require('mic');
 const Express = require('express');
@@ -18,6 +19,21 @@ class Server {
     const app = Express();
     useWebSocket(app);
 
+    app.use(Express.json());
+    app.use('/', Express.static('public'));
+    app.post('/message', (req, res) => {
+      const { role = 'user', message } = req.body;
+
+      if (message == null) {
+        res.status(400).json({
+          error: 'Bad Request: `message` property required',
+        });
+      } else {
+        this.sendMessage(role, message);
+        res.sendStatus(200);
+      }
+    });
+
     app.ws('/', (socket) => {
       this.sockets.push(socket);
       console.log(`connected. current # of connection: ${this.sockets.length}`);
@@ -26,6 +42,14 @@ class Server {
           return s !== socket;
         });
         console.log(`closed. current # of connection: ${this.sockets.length}`);
+      });
+      socket.on('message', (msg) => {
+        const targets = this.sockets.filter((s) => {
+          return s !== socket;
+        });
+        for (const t of targets) {
+          t.send(msg);
+        }
       });
     });
 
@@ -38,10 +62,12 @@ class Server {
     this.server.close();
   }
 
-  sendMessage(message) {
+  sendMessage(role, message) {
+    const str = JSON.stringify({ role, message });
     for (const socket of this.sockets) {
-      socket.send(message);
+      socket.send(str);
     }
+    console.log(`message sent: ${str}`);
   }
 }
 
@@ -50,23 +76,23 @@ class VoskRecognizer {
   rec;
   micInstance;
   micInputStream;
-  constructor({ vosk, onRecognized }) {
+  constructor({ device, vosk, onRecognized }) {
     this.onRecognized = onRecognized;
     this.model = new vosk.Model(VOSK_MODEL_PATH);
     this.rec = new vosk.Recognizer({
       model: this.model,
       sampleRate: VOSK_SAMPLE_RATE,
     });
-    this.micInstance = mic({
-      /**
-       * @note If you get "No such file or directory" error
-       * You should specify the device
-       **/
-      // device: 'plughw:CARD=PCH,DEV=0',
+
+    const option = {
       rate: String(VOSK_SAMPLE_RATE),
       channels: String(VOSK_NUM_CHANNELS),
       debug: true,
-    });
+    };
+    if (device) {
+      option.device = device;
+    }
+    this.micInstance = mic(option);
 
     const micInputStream = this.micInstance.getAudioStream();
     micInputStream.on('data', (data) => {
@@ -121,8 +147,12 @@ class KeyHandler {
 }
 
 (function main() {
+  const argv = minimist(process.argv.slice(2));
+  const device = argv.device;
+  const useVosk = argv.useVosk !== 'false';
+
   let listening = true;
-  if (!fs.existsSync(VOSK_MODEL_PATH)) {
+  if (useVosk && !fs.existsSync(VOSK_MODEL_PATH)) {
     console.log(
       `Please download the model from https://alphacephei.com/vosk/models and unpack as ${VOSK_MODEL_PATH} in the current folder.`
     );
@@ -133,36 +163,43 @@ class KeyHandler {
     port: SERVER_PORT,
   });
 
-  vosk.setLogLevel(0);
-  const recognizer = new VoskRecognizer({
-    vosk,
-    onRecognized: (message) => {
-      if (listening) {
-        server.sendMessage(message);
-      }
-    },
-  });
+  let recognizer;
+  let keyHandler;
 
-  const keyHandler = new KeyHandler({
-    stdin: process.stdin,
-    onKeyPressed: (key) => {
-      if (key.name === 'space') {
-        listening = !listening;
+  if (useVosk) {
+    vosk.setLogLevel(0);
+    recognizer = new VoskRecognizer({
+      device,
+      vosk,
+      onRecognized: (message) => {
         if (listening) {
-          console.log('resuming');
-          // recognizer.start();
-        } else {
-          console.log('pausing');
-          // recognizer.pause();
+          server.sendMessage(message);
         }
-      }
-      // console.log(key);
-    },
-  });
+      },
+    });
+    keyHandler = new KeyHandler({
+      stdin: process.stdin,
+      onKeyPressed: (key) => {
+        if (key.name === 'space') {
+          listening = !listening;
+          if (listening) {
+            console.log('resuming');
+            // recognizer.start();
+          } else {
+            console.log('pausing');
+            // recognizer.pause();
+          }
+        }
+        // console.log(key);
+      },
+    });
+  }
+
   process.on('SIGINT', function () {
     server.close();
-    recognizer.close();
-    keyHandler.close();
+    recognizer?.close();
+    keyHandler?.close();
     console.log('\nDone');
+    process.exit();
   });
 })();
