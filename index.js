@@ -1,5 +1,5 @@
 const vosk = require('./node_modules/vosk');
-const minimist = require('minimist')
+const minimist = require('minimist');
 const fs = require('fs');
 const mic = require('mic');
 const Express = require('express');
@@ -42,6 +42,14 @@ class Server {
           return s !== socket;
         });
         console.log(`closed. current # of connection: ${this.sockets.length}`);
+      });
+      socket.on('message', (msg) => {
+        const targets = this.sockets.filter((s) => {
+          return s !== socket;
+        });
+        for (const t of targets) {
+          t.send(msg);
+        }
       });
     });
 
