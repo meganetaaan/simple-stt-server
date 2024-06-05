@@ -173,7 +173,7 @@ class KeyHandler {
       vosk,
       onRecognized: (message) => {
         if (listening) {
-          server.sendMessage(message);
+          server.sendMessage('user', message);
         }
       },
     });
